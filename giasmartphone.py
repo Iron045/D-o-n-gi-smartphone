@@ -18,7 +18,7 @@ def load_data():
     
     # One-hot encoding cho các cột phân loại
     data_encoded = pd.get_dummies(data_filtered, columns=['brand', 'os'], drop_first=True)
-    X = data_encoded.drop('price(USD)', axis=1)
+    X = data_encoded.drop('price(USD)', axis=1)  # Loại bỏ cột mục tiêu 'price(USD)'
     y = data_encoded['price(USD)']
     
     return X, y, X.columns
