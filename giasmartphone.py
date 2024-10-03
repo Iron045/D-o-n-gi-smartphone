@@ -10,14 +10,14 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # Tải dữ liệu và xử lý
 @st.cache
 def load_data():
-    data = pd.read_csv('phone_prices.csv')  # Đường dẫn file CSV của bạn
+    data = pd.read_csv('phone_prices.csv')
     data[['width', 'height']] = data['resolution'].str.split('x', expand=True)
     data['width'] = pd.to_numeric(data['width'])
     data['height'] = pd.to_numeric(data['height'])
     
     data_filtered = data[['brand', 'os', 'inches', 'width', 'height', 'battery', 'ram(GB)', 'weight(g)', 'storage(GB)', 'price(USD)']]
     data_encoded = pd.get_dummies(data_filtered, columns=['brand', 'os'], drop_first=True)
-    X = data_encoded.drop('price(USD)', axis=1)  # Loại bỏ cột mục tiêu 'price(USD)'
+    X = data_encoded.drop('price(USD)', axis=1)
     y = data_encoded['price(USD)']
     
     return X, y, data_encoded.columns
