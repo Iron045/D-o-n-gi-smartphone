@@ -82,8 +82,10 @@ model, cols = train_model()
 input_data = create_input_data(cols)
 
 # Dự đoán giá
-predicted_price = model.predict(input_data)[0]
-
-# Hiển thị giá dự đoán
-st.title("Dự đoán giá Smartphone")
-st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
+try:
+    predicted_price = model.predict(input_data)[0]
+    # Hiển thị giá dự đoán
+    st.title("Dự đoán giá Smartphone")
+    st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
+except ValueError as e:
+    st.error(f"Đã xảy ra lỗi: {e}")
