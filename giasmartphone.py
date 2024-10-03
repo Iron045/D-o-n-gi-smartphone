@@ -131,7 +131,7 @@ def main():
     # Đánh giá mô hình
     evaluation_df = evaluate_models(models, X_test, y_test)
 
-    # Hiển thị bảng đánh giá mô hình
+    # Hiển thị bảng đánh giá mô hình dưới bảng giá trị dự đoán
     st.subheader("Đánh giá mô hình")
     st.dataframe(evaluation_df)
 
