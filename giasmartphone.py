@@ -21,7 +21,7 @@ def load_data():
     X = data_encoded.drop('price(USD)', axis=1)
     y = data_encoded['price(USD)']
     
-    return X, y, data_encoded.columns
+    return X, y, X.columns
 
 # Huấn luyện mô hình
 @st.cache
@@ -57,22 +57,25 @@ def create_input_data(cols):
     })
     
     # One-hot encoding cho thương hiệu và hệ điều hành
-    brand_dict = {'Apple': 0, 'Samsung': 0, 'Xiaomi': 0, 'Oppo': 0, 'Realme': 0}
-    os_dict = {'Android': 0, 'iOS': 0}
+    brand_dict = {'brand_Apple': 0, 'brand_Samsung': 0, 'brand_Xiaomi': 0, 'brand_Oppo': 0, 'brand_Realme': 0}
+    os_dict = {'os_Android': 0, 'os_iOS': 0}
     
-    brand_dict[brand] = 1
-    os_dict[os] = 1
+    brand_dict[f'brand_{brand}'] = 1
+    os_dict[f'os_{os}'] = 1
     
     for key, value in brand_dict.items():
-        input_data[f'brand_{key}'] = value
+        input_data[key] = value
     for key, value in os_dict.items():
-        input_data[f'os_{key}'] = value
+        input_data[key] = value
     
     # Đảm bảo dữ liệu đầu vào có đủ các cột cần thiết
     for col in cols:
         if col not in input_data.columns:
             input_data[col] = 0
     
+    # Sắp xếp cột theo thứ tự đã huấn luyện
+    input_data = input_data[cols]
+
     return input_data
 
 # Tải và huấn luyện mô hình
