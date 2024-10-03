@@ -20,7 +20,7 @@ def load_data():
     X = data_encoded.drop('price(USD)', axis=1)  # Loại bỏ cột mục tiêu 'price(USD)'
     y = data_encoded['price(USD)']
     
-    return X, y
+    return X, y, data_encoded.columns
 
 # Huấn luyện mô hình
 def train_models(X_train, y_train):
@@ -58,7 +58,7 @@ def evaluate_models(models, X_test, y_test):
     return pd.DataFrame(evaluation_results)
 
 # Tạo input từ người dùng
-def create_input_data():
+def create_input_data(cols):
     brand = st.selectbox('Chọn thương hiệu', ['Apple', 'Samsung', 'Xiaomi', 'Oppo', 'Realme'])
     os = st.selectbox('Chọn hệ điều hành', ['Android', 'iOS'])
     inches = st.slider('Kích thước màn hình (inches)', 4.0, 7.0, 6.0)
@@ -69,6 +69,7 @@ def create_input_data():
     weight = st.slider('Trọng lượng (g)', 100, 300, 200)
     storage = st.slider('Dung lượng bộ nhớ trong (GB)', 16, 512, 128)
 
+    # Tạo DataFrame cho đầu vào
     input_data = pd.DataFrame({
         'inches': [inches],
         'width': [width],
@@ -76,19 +77,37 @@ def create_input_data():
         'battery': [battery],
         'ram(GB)': [ram],
         'weight(g)': [weight],
-        'storage(GB)': [storage],
-        f'brand_{brand}': [1],
-        f'os_{os}': [1]
+        'storage(GB)': [storage]
     })
 
+    # One-hot encoding cho thương hiệu và hệ điều hành
+    brand_dict = {'brand_Apple': 0, 'brand_Samsung': 0, 'brand_Xiaomi': 0, 'brand_Oppo': 0, 'brand_Realme': 0}
+    os_dict = {'os_Android': 0, 'os_iOS': 0}
+    
+    brand_dict[f'brand_{brand}'] = 1
+    os_dict[f'os_{os}'] = 1
+
+    for key, value in brand_dict.items():
+        input_data[key] = value
+    for key, value in os_dict.items():
+        input_data[key] = value
+    
+    # Đảm bảo rằng dữ liệu đầu vào có đầy đủ các cột như trong dữ liệu huấn luyện
+    for col in cols:
+        if col not in input_data.columns:
+            input_data[col] = 0
+    
+    # Sắp xếp cột theo đúng thứ tự
+    input_data = input_data[cols]
+    
     return input_data
 
 # Chạy ứng dụng
 def main():
     st.title('Dự đoán giá smartphone')
-    
+
     # Tải dữ liệu
-    X, y = load_data()
+    X, y, cols = load_data()
 
     # Chia dữ liệu
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -104,7 +123,7 @@ def main():
     st.dataframe(evaluation_df)
 
     # Tạo dữ liệu input từ người dùng
-    input_data = create_input_data()
+    input_data = create_input_data(cols)
 
     # Dự đoán giá cho dữ liệu người dùng
     predictions = {}
