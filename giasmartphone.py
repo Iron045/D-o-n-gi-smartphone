@@ -1,95 +1,72 @@
-# Import các thư viện cần thiết
+import streamlit as st
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, Ridge
-from sklearn.neural_network import MLPRegressor
-from sklearn.ensemble import BaggingRegressor, StackingRegressor
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
-import matplotlib.pyplot as plt
-import seaborn as sns
+from sklearn.linear_model import LinearRegression
 
-# Đọc dữ liệu từ file CSV
-data = pd.read_csv('data/phone_prices.csv')  # Thay bằng đường dẫn chính xác tới file dữ liệu của bạn
+# Tải dữ liệu
+@st.cache
+def load_data():
+    data = pd.read_csv('phone_prices.csv')  # Thay đường dẫn của bạn nếu cần
+    data[['width', 'height']] = data['resolution'].str.split('x', expand=True)
+    data['width'] = pd.to_numeric(data['width'])
+    data['height'] = pd.to_numeric(data['height'])
+    data_filtered = data[['brand', 'os', 'inches', 'width', 'height', 'battery', 'ram(GB)', 'weight(g)', 'storage(GB)', 'price(USD)']]
+    data_encoded = pd.get_dummies(data_filtered, columns=['brand', 'os'], drop_first=True)
+    X = data_encoded.drop('price(USD)', axis=1)
+    y = data_encoded['price(USD)']
+    return X, y
 
-# Hiển thị 5 dòng đầu tiên của tập dữ liệu để kiểm tra
-print(data.head())
+# Huấn luyện mô hình
+@st.cache
+def train_model():
+    X, y = load_data()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+    return model
 
-# Tách cột resolution thành hai cột riêng biệt: width và height
-data[['width', 'height']] = data['resolution'].str.split('x', expand=True)
+# Giao diện Streamlit
+st.title("Dự đoán giá Smartphone")
 
-# Chuyển đổi cột width và height sang kiểu số
-data['width'] = pd.to_numeric(data['width'])
-data['height'] = pd.to_numeric(data['height'])
+# Input từ người dùng
+brand = st.selectbox('Chọn thương hiệu', ['Apple', 'Samsung', 'Xiaomi', 'Oppo', 'Realme'])
+os = st.selectbox('Chọn hệ điều hành', ['Android', 'iOS'])
+inches = st.slider('Kích thước màn hình (inches)', 4.0, 7.0, 6.0)
+width = st.slider('Độ phân giải (chiều rộng)', 600, 3000, 1080)
+height = st.slider('Độ phân giải (chiều cao)', 1000, 4000, 2400)
+battery = st.slider('Dung lượng pin (mAh)', 1000, 5000, 3000)
+ram = st.slider('Dung lượng RAM (GB)', 2, 12, 4)
+weight = st.slider('Trọng lượng (g)', 100, 300, 200)
+storage = st.slider('Dung lượng bộ nhớ trong (GB)', 16, 512, 128)
 
-# Lọc các cột không cần thiết, bỏ các cột liên quan đến video và các cột không liên quan khác
-data_filtered = data[['brand', 'os', 'inches', 'width', 'height', 'battery', 'ram(GB)', 'weight(g)', 'storage(GB)', 'price(USD)']]
+# Chuyển đổi input thành DataFrame
+input_data = pd.DataFrame({
+    'inches': [inches],
+    'width': [width],
+    'height': [height],
+    'battery': [battery],
+    'ram(GB)': [ram],
+    'weight(g)': [weight],
+    'storage(GB)': [storage]
+})
 
-# Xử lý các cột phân loại (brand, os) bằng One-Hot Encoding
-data_encoded = pd.get_dummies(data_filtered, columns=['brand', 'os'], drop_first=True)
+# Thêm One-Hot Encoding cho brand và os
+brand_dict = {'Apple': 0, 'Samsung': 0, 'Xiaomi': 0, 'Oppo': 0, 'Realme': 0}
+os_dict = {'Android': 0, 'iOS': 0}
 
-# Xác định biến đầu vào (X) và biến mục tiêu (y)
-X = data_encoded.drop('price(USD)', axis=1)
-y = data_encoded['price(USD)']
+brand_dict[brand] = 1
+os_dict[os] = 1
 
-# Chia dữ liệu thành tập huấn luyện và tập kiểm tra
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Thêm dữ liệu vào input_data
+for key, value in brand_dict.items():
+    input_data[f'brand_{key}'] = value
+for key, value in os_dict.items():
+    input_data[f'os_{key}'] = value
 
-# Mô hình hồi quy tuyến tính
-model_lr = LinearRegression()
-model_lr.fit(X_train, y_train)
-y_pred_lr = model_lr.predict(X_test)
+# Huấn luyện mô hình và dự đoán giá
+model = train_model()
+predicted_price = model.predict(input_data)[0]
 
-# Mô hình hồi quy Ridge
-model_ridge = Ridge(alpha=1.0)
-model_ridge.fit(X_train, y_train)
-y_pred_ridge = model_ridge.predict(X_test)
-
-# Mô hình mạng nơ-ron đơn giản (MLP Regressor)
-model_nn = MLPRegressor(hidden_layer_sizes=(100,), max_iter=500)
-model_nn.fit(X_train, y_train)
-y_pred_nn = model_nn.predict(X_test)
-
-# Mô hình Bagging Regressor
-model_bagging = BaggingRegressor(estimator=LinearRegression(), n_estimators=10, random_state=42)
-model_bagging.fit(X_train, y_train)
-y_pred_bagging = model_bagging.predict(X_test)
-
-# Mô hình Stacking Regressor
-estimators = [('lr', LinearRegression()), ('ridge', Ridge(alpha=1.0))]
-model_stacking = StackingRegressor(estimators=estimators, final_estimator=Ridge())
-model_stacking.fit(X_train, y_train)
-y_pred_stacking = model_stacking.predict(X_test)
-
-# Hàm đánh giá mô hình
-def evaluate_model(y_test, y_pred, model_name):
-    mse = mean_squared_error(y_test, y_pred)
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    print(f"{model_name} - MSE: {mse}, MAE: {mae}, R²: {r2}")
-    return mse, r2
-
-# Đánh giá tất cả các mô hình
-evaluate_model(y_test, y_pred_lr, "Linear Regression")
-evaluate_model(y_test, y_pred_ridge, "Ridge Regression")
-evaluate_model(y_test, y_pred_nn, "Neural Network")
-evaluate_model(y_test, y_pred_bagging, "Bagging Regressor")
-evaluate_model(y_test, y_pred_stacking, "Stacking Regressor")
-
-
-# Giả sử bạn đã huấn luyện mô hình và có các dữ liệu sau:
-# y_train thực, y_train dự đoán, y_test thực, y_test dự đoán, y_val thực, y_val dự đoán
-
-# Giá trị dự đoán của tập huấn luyện và kiểm tra
-y_train_pred = model_lr.predict(X_train)
-y_test_pred = model_lr.predict(X_test)
-
-
-# Hiển thị đồ thị so sánh giá trị thực tế và giá trị dự đoán của một mô hình (Linear Regression)
-plt.figure(figsize=(10, 6))
-plt.scatter(y_test, y_pred_lr, color='blue', label='Predicted Price')
-plt.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], color='red', lw=2, label='Actual Price')
-plt.xlabel('Actual Price')
-plt.ylabel('Predicted Price')
-plt.title('Linear Regression - Actual vs Predicted Prices')
-plt.legend()
-plt.show()
+# Hiển thị kết quả
+st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
