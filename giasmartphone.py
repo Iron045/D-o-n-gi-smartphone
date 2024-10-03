@@ -76,6 +76,10 @@ def create_input_data(cols):
     # Sắp xếp cột theo thứ tự đã huấn luyện
     input_data = input_data[cols]
 
+    # Xóa cột 'price(USD)' nếu nó tồn tại (phòng ngừa lỗi)
+    if 'price(USD)' in input_data.columns:
+        input_data = input_data.drop('price(USD)', axis=1)
+
     return input_data
 
 # Tải và huấn luyện mô hình
