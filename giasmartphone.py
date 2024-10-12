@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, Lasso
-from sklearn.ensemble import RandomForestRegressor, StackingRegressor
+from sklearn.ensemble import StackingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -35,17 +35,14 @@ def train_model(model_type):
 
     if model_type == 'Linear Regression':
         model = LinearRegression()
-    elif model_type == 'Random Forest':
-        model = RandomForestRegressor(n_estimators=100, random_state=42)
     elif model_type == 'Lasso Regression':
         model = Lasso(alpha=0.1)
     elif model_type == 'Neural Network':
         # Sử dụng pipeline với StandardScaler để chuẩn hóa dữ liệu trước khi huấn luyện mạng neural
         model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
     elif model_type == 'Stacking':
-        # Stacking sử dụng LinearRegression làm mô hình chính và kết hợp RandomForest và Lasso làm mô hình con
+        # Stacking sử dụng LinearRegression làm mô hình chính và kết hợp Lasso làm mô hình con
         estimators = [
-            ('rf', RandomForestRegressor(n_estimators=100, random_state=42)),
             ('lasso', Lasso(alpha=0.1))
         ]
         model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
@@ -100,7 +97,7 @@ def create_input_data(cols):
     return input_data
 
 # Người dùng chọn mô hình
-model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Random Forest', 'Lasso Regression', 'Neural Network', 'Stacking'])
+model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Tải và huấn luyện mô hình
 model, cols = train_model(model_type)
