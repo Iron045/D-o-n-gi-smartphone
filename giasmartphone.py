@@ -2,7 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Lasso
+from sklearn.ensemble import RandomForestRegressor, StackingRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 # Tải dữ liệu và xử lý
 @st.cache
@@ -25,10 +29,27 @@ def load_data():
 
 # Huấn luyện mô hình
 @st.cache
-def train_model():
+def train_model(model_type):
     X, y, cols = load_data()
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    model = LinearRegression()
+
+    if model_type == 'Linear Regression':
+        model = LinearRegression()
+    elif model_type == 'Random Forest':
+        model = RandomForestRegressor(n_estimators=100, random_state=42)
+    elif model_type == 'Lasso Regression':
+        model = Lasso(alpha=0.1)
+    elif model_type == 'Neural Network':
+        # Sử dụng pipeline với StandardScaler để chuẩn hóa dữ liệu trước khi huấn luyện mạng neural
+        model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
+    elif model_type == 'Stacking':
+        # Stacking sử dụng LinearRegression làm mô hình chính và kết hợp RandomForest và Lasso làm mô hình con
+        estimators = [
+            ('rf', RandomForestRegressor(n_estimators=100, random_state=42)),
+            ('lasso', Lasso(alpha=0.1))
+        ]
+        model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
+    
     model.fit(X_train, y_train)
     return model, cols
 
@@ -76,14 +97,13 @@ def create_input_data(cols):
     # Sắp xếp cột theo thứ tự đã huấn luyện
     input_data = input_data[cols]
 
-    # Xóa cột 'price(USD)' nếu nó tồn tại (phòng ngừa lỗi)
-    if 'price(USD)' in input_data.columns:
-        input_data = input_data.drop('price(USD)', axis=1)
-
     return input_data
 
+# Người dùng chọn mô hình
+model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Random Forest', 'Lasso Regression', 'Neural Network', 'Stacking'])
+
 # Tải và huấn luyện mô hình
-model, cols = train_model()
+model, cols = train_model(model_type)
 
 # Tạo dữ liệu input từ người dùng
 input_data = create_input_data(cols)
