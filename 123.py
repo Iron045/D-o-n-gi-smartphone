@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.ensemble import StackingRegressor
@@ -113,25 +112,11 @@ if st.button("Dự đoán giá"):
         st.title("Dự đoán giá Smartphone")
         st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
         
-        # Hiển thị biểu đồ so sánh các chỉ số đánh giá
-        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-
-        # MAE
-        axs[0].bar(['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'], [mae, mae, mae, mae], color='lightblue')
-        axs[0].set_title('MAE Comparison')
-        axs[0].set_ylabel('MAE')
-
-        # MSE
-        axs[1].bar(['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'], [mse, mse, mse, mse], color='lightgreen')
-        axs[1].set_title('MSE Comparison')
-        axs[1].set_ylabel('MSE')
-
-        # R²
-        axs[2].bar(['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'], [r2, r2, r2, r2], color='salmon')
-        axs[2].set_title('R² Comparison')
-        axs[2].set_ylabel('R²')
-
-        st.pyplot(fig)
+        # Hiển thị các chỉ số đánh giá
+        st.write("### Model Evaluation Metrics:")
+        st.write(f"**MAE** (Mean Absolute Error): {mae:.4f}")
+        st.write(f"**MSE** (Mean Squared Error): {mse:.4f}")
+        st.write(f"**R²**: {r2:.4f}")
 
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
