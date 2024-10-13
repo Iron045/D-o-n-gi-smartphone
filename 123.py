@@ -1,17 +1,16 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.linear_model import LinearRegression, Lasso
-from sklearn.ensemble import StackingRegressor
+from sklearn.ensemble import StackingRegressor, RandomForestRegressor, GradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import SelectKBest, f_regression
-import joblib
+from sklearn.metrics import mean_squared_error
 
 # Tải dữ liệu và xử lý
-@st.cache_data
+@st.cache
 def load_data():
     data = pd.read_csv('phone_prices.csv')  # Đường dẫn file CSV của bạn
     # Tách cột resolution thành width và height
@@ -19,52 +18,44 @@ def load_data():
     data['width'] = pd.to_numeric(data['width'])
     data['height'] = pd.to_numeric(data['height'])
     
+    # Tính toán tỷ lệ khung hình
+    data['aspect_ratio'] = data['width'] / data['height']
+    
     # Lọc các cột liên quan
-    data_filtered = data[['brand', 'os', 'inches', 'width', 'height', 'battery', 'ram(GB)', 'weight(g)', 'storage(GB)', 'price(USD)']]
+    data_filtered = data[['brand', 'os', 'inches', 'width', 'height', 'battery', 'ram(GB)', 'weight(g)', 'storage(GB)', 'price(USD)', 'aspect_ratio']]
     
     # One-hot encoding cho các cột phân loại
     data_encoded = pd.get_dummies(data_filtered, columns=['brand', 'os'], drop_first=True)
-    
-    # Xử lý giá trị thiếu (nếu có)
-    data_encoded.fillna(data_encoded.mean(), inplace=True)
-    
     X = data_encoded.drop('price(USD)', axis=1)  # Loại bỏ cột mục tiêu 'price(USD)'
     y = data_encoded['price(USD)']
     
     return X, y, X.columns
 
-# Tối ưu mô hình Neural Network với RandomizedSearchCV
-@st.cache_resource
-def optimize_neural_network(X_train, y_train):
-    mlp = MLPRegressor(random_state=42)
+# Huấn luyện mô hình
+@st.cache
+def train_model(model_type):
+    X, y, cols = load_data()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    param_dist = {
-        'hidden_layer_sizes': [(64,), (64, 64), (128, 64)],
-        'learning_rate_init': [0.001, 0.01, 0.1],
-        'max_iter': [500, 1000, 2000]
-    }
+    if model_type == 'Linear Regression':
+        model = LinearRegression()
+    elif model_type == 'Lasso Regression':
+        model = Lasso(alpha=0.1)
+    elif model_type == 'Neural Network':
+        model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
+    elif model_type == 'Stacking':
+        estimators = [
+            ('lasso', Lasso(alpha=0.1)),
+            ('rf', RandomForestRegressor(n_estimators=100, random_state=42)),
+            ('gb', GradientBoostingRegressor(random_state=42))
+        ]
+        model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
 
-    pipeline = make_pipeline(StandardScaler(), mlp)
-
-    # Sử dụng RandomizedSearchCV để tìm tham số tốt nhất
-    random_search = RandomizedSearchCV(pipeline, param_distributions=param_dist, n_iter=10, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
-
-    random_search.fit(X_train, y_train)
-
-    print("Best parameters for Neural Network:", random_search.best_params_)
-
-    best_model = random_search.best_estimator_
-
-    return best_model
-
-# Lưu và tải mô hình
-@st.cache_resource
-def save_model(model, filename):
-    joblib.dump(model, filename)
-
-@st.cache_resource
-def load_model(filename):
-    return joblib.load(filename)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    mse = mean_squared_error(y_test, y_pred)
+    
+    return model, cols, mse
 
 # Tạo input từ người dùng
 def create_input_data(cols):
@@ -87,7 +78,8 @@ def create_input_data(cols):
         'battery': [battery],
         'ram(GB)': [ram],
         'weight(g)': [weight],
-        'storage(GB)': [storage]
+        'storage(GB)': [storage],
+        'aspect_ratio': [width / height]
     })
     
     # One-hot encoding cho thương hiệu và hệ điều hành
@@ -102,81 +94,33 @@ def create_input_data(cols):
     for key, value in os_dict.items():
         input_data[key] = value
     
+    # Đảm bảo dữ liệu đầu vào có đủ các cột cần thiết
     for col in cols:
         if col not in input_data.columns:
             input_data[col] = 0
     
+    # Sắp xếp cột theo thứ tự đã huấn luyện
     input_data = input_data[cols]
 
     return input_data
 
-# Huấn luyện và đánh giá mô hình
-@st.cache_resource
-def train_and_evaluate_models():
-    X, y, cols = load_data()
-    
-    # Sử dụng SelectKBest để chọn tính năng tốt nhất
-    selector = SelectKBest(score_func=f_regression, k='all')  # Lựa chọn tất cả tính năng
-    X_new = selector.fit_transform(X, y)
-    selected_features = X.columns[selector.get_support()]
-
-    X_train, X_test, y_train, y_test = train_test_split(X_new, y, test_size=0.2, random_state=42)
-
-    # Linear Regression
-    lr_model = LinearRegression()
-    lr_model.fit(X_train, y_train)
-    lr_score = lr_model.score(X_test, y_test)
-
-    # Lasso Regression
-    lasso_model = Lasso(alpha=0.1)
-    lasso_model.fit(X_train, y_train)
-    lasso_score = lasso_model.score(X_test, y_test)
-
-    # Neural Network (MLP) với tối ưu tham số
-    nn_model = optimize_neural_network(X_train, y_train)
-    
-    # Lưu mô hình Neural Network
-    save_model(nn_model, 'nn_model.joblib')
-
-    # Tải mô hình Neural Network nếu cần
-    nn_model = load_model('nn_model.joblib')
-    
-    nn_score = nn_model.score(X_test, y_test)
-
-    # Stacking Regressor
-    estimators = [
-        ('lasso', Lasso(alpha=0.1))
-    ]
-    stacking_model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
-    stacking_model.fit(X_train, y_train)
-    stacking_score = stacking_model.score(X_test, y_test)
-
-    return lr_model, lasso_model, nn_model, stacking_model, selected_features
-
-# Main Streamlit app
-st.title("Dự đoán Giá Smartphone")
-
+# Người dùng chọn mô hình
 model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Tải và huấn luyện mô hình
-lr_model, lasso_model, nn_model, stacking_model, cols = train_and_evaluate_models()
+model, cols, mse = train_model(model_type)
 
 # Tạo dữ liệu input từ người dùng
 input_data = create_input_data(cols)
 
 # Thêm nút dự đoán
 if st.button("Dự đoán giá"):
+    # Dự đoán giá
     try:
-        if model_type == 'Linear Regression':
-            predicted_price = lr_model.predict(input_data)[0]
-        elif model_type == 'Lasso Regression':
-            predicted_price = lasso_model.predict(input_data)[0]
-        elif model_type == 'Neural Network':
-            predicted_price = nn_model.predict(input_data)[0]
-        elif model_type == 'Stacking':
-            predicted_price = stacking_model.predict(input_data)[0]
-        
+        predicted_price = model.predict(input_data)[0]
         # Hiển thị giá dự đoán
+        st.title("Dự đoán giá Smartphone")
         st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
+        st.subheader(f"Mean Squared Error: {mse:.2f}")
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
