@@ -1,15 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.linear_model import LinearRegression, Lasso
-from sklearn.ensemble import StackingRegressor, RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import StackingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-import xgboost as xgb
-import lightgbm as lgb
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -49,25 +47,12 @@ def train_model(model_type):
         model = GridSearchCV(Lasso(), param_grid, cv=5, scoring='neg_mean_squared_error')
     elif model_type == 'Neural Network':
         model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
-    elif model_type == 'Random Forest':
-        param_grid = {
-            'n_estimators': [100, 200],
-            'max_depth': [None, 10, 20],
-            'min_samples_split': [2, 5],
-            'min_samples_leaf': [1, 2, 4],
-        }
-        model = GridSearchCV(RandomForestRegressor(), param_grid, cv=5, scoring='neg_mean_squared_error')
     elif model_type == 'Stacking':
         estimators = [
             ('lasso', Lasso(alpha=0.1)),
-            ('rf', RandomForestRegressor(n_estimators=100, random_state=42)),
-            ('gb', GradientBoostingRegressor(random_state=42))
+            ('nn', MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
         ]
         model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
-    elif model_type == 'XGBoost':
-        model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=100, random_state=42)
-    elif model_type == 'LightGBM':
-        model = lgb.LGBMRegressor(n_estimators=100, random_state=42)
 
     model.fit(X_train, y_train)
     
@@ -127,7 +112,7 @@ def create_input_data(cols):
     return input_data
 
 # Người dùng chọn mô hình
-model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Random Forest', 'Stacking', 'XGBoost', 'LightGBM'])
+model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Tải và huấn luyện mô hình
 model, cols, mse, mae, r2, y_test, y_pred = train_model(model_type)
@@ -164,7 +149,7 @@ if st.button("Dự đoán giá"):
 
 # Hiển thị các tham số đánh giá cho tất cả các mô hình
 st.subheader("Tham số đánh giá cho tất cả các mô hình:")
-models = ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Random Forest', 'Stacking', 'XGBoost', 'LightGBM']
+models = ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking']
 results = {}
 
 for m in models:
