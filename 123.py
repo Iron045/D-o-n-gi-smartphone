@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.ensemble import StackingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV
+from sklearn.feature_selection import SelectKBest, f_regression
 
 # Tải dữ liệu và xử lý
 @st.cache
@@ -23,37 +23,35 @@ def load_data():
     
     # One-hot encoding cho các cột phân loại
     data_encoded = pd.get_dummies(data_filtered, columns=['brand', 'os'], drop_first=True)
+    
+    # Xử lý giá trị thiếu (nếu có)
+    data_encoded.fillna(data_encoded.mean(), inplace=True)
+    
     X = data_encoded.drop('price(USD)', axis=1)  # Loại bỏ cột mục tiêu 'price(USD)'
     y = data_encoded['price(USD)']
     
     return X, y, X.columns
 
-# Tối ưu mô hình Neural Network với GridSearchCV
+# Tối ưu mô hình Neural Network với RandomizedSearchCV
 def optimize_neural_network(X_train, y_train):
-    # Tạo MLPRegressor
     mlp = MLPRegressor(random_state=42)
 
-    # Định nghĩa các tham số cần tối ưu cho MLPRegressor
-    param_grid = {
-        'mlpregressor__hidden_layer_sizes': [(64,), (64, 64), (128, 64)],
-        'mlpregressor__learning_rate_init': [0.001, 0.01, 0.1],
-        'mlpregressor__max_iter': [500, 1000, 2000]
+    param_dist = {
+        'hidden_layer_sizes': [(64,), (64, 64), (128, 64)],
+        'learning_rate_init': [0.001, 0.01, 0.1],
+        'max_iter': [500, 1000, 2000]
     }
 
-    # Sử dụng pipeline với StandardScaler để chuẩn hóa dữ liệu
     pipeline = make_pipeline(StandardScaler(), mlp)
 
-    # Sử dụng GridSearchCV để tìm tham số tốt nhất cho Neural Network
-    grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='neg_mean_squared_error')
+    # Sử dụng RandomizedSearchCV để tìm tham số tốt nhất
+    random_search = RandomizedSearchCV(pipeline, param_distributions=param_dist, n_iter=10, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
 
-    # Huấn luyện mô hình với tập huấn luyện
-    grid_search.fit(X_train, y_train)
+    random_search.fit(X_train, y_train)
 
-    # In ra các tham số tốt nhất tìm được
-    print("Best parameters for Neural Network:", grid_search.best_params_)
+    print("Best parameters for Neural Network:", random_search.best_params_)
 
-    # Lấy mô hình tốt nhất
-    best_model = grid_search.best_estimator_
+    best_model = random_search.best_estimator_
 
     return best_model
 
@@ -93,36 +91,39 @@ def create_input_data(cols):
     for key, value in os_dict.items():
         input_data[key] = value
     
-    # Đảm bảo dữ liệu đầu vào có đủ các cột cần thiết
     for col in cols:
         if col not in input_data.columns:
             input_data[col] = 0
     
-    # Sắp xếp cột theo thứ tự đã huấn luyện
     input_data = input_data[cols]
 
     return input_data
 
 # Huấn luyện và đánh giá mô hình
 def train_and_evaluate_models():
-    # Load dữ liệu
     X, y, cols = load_data()
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
+    # Sử dụng SelectKBest để chọn tính năng tốt nhất
+    selector = SelectKBest(score_func=f_regression, k='all')  # Lựa chọn tất cả tính năng
+    X_new = selector.fit_transform(X, y)
+    selected_features = X.columns[selector.get_support()]
+
+    X_train, X_test, y_train, y_test = train_test_split(X_new, y, test_size=0.2, random_state=42)
+
     # Linear Regression
     lr_model = LinearRegression()
     lr_model.fit(X_train, y_train)
     lr_score = lr_model.score(X_test, y_test)
-    
+
     # Lasso Regression
     lasso_model = Lasso(alpha=0.1)
     lasso_model.fit(X_train, y_train)
     lasso_score = lasso_model.score(X_test, y_test)
-    
+
     # Neural Network (MLP) với tối ưu tham số
     nn_model = optimize_neural_network(X_train, y_train)
     nn_score = nn_model.score(X_test, y_test)
-    
+
     # Stacking Regressor
     estimators = [
         ('lasso', Lasso(alpha=0.1))
@@ -131,7 +132,7 @@ def train_and_evaluate_models():
     stacking_model.fit(X_train, y_train)
     stacking_score = stacking_model.score(X_test, y_test)
 
-    return lr_model, lasso_model, nn_model, stacking_model, cols
+    return lr_model, lasso_model, nn_model, stacking_model, selected_features
 
 # Main Streamlit app
 st.title("Dự đoán giá Smartphone")
