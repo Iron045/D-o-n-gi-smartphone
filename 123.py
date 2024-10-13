@@ -1,18 +1,19 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.ensemble import StackingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # Tải dữ liệu và xử lý
 @st.cache
 def load_data():
     data = pd.read_csv('phone_prices.csv')  # Đường dẫn file CSV của bạn
-    # Tách cột resolution thành width và height
     data[['width', 'height']] = data['resolution'].str.split('x', expand=True)
     data['width'] = pd.to_numeric(data['width'])
     data['height'] = pd.to_numeric(data['height'])
@@ -22,12 +23,12 @@ def load_data():
     
     # One-hot encoding cho các cột phân loại
     data_encoded = pd.get_dummies(data_filtered, columns=['brand', 'os'], drop_first=True)
-    X = data_encoded.drop('price(USD)', axis=1)  # Loại bỏ cột mục tiêu 'price(USD)'
+    X = data_encoded.drop('price(USD)', axis=1)
     y = data_encoded['price(USD)']
     
     return X, y, X.columns
 
-# Huấn luyện mô hình
+# Huấn luyện mô hình và tính toán đánh giá
 @st.cache
 def train_model(model_type):
     X, y, cols = load_data()
@@ -38,41 +39,25 @@ def train_model(model_type):
     elif model_type == 'Lasso Regression':
         model = Lasso(alpha=0.1)
     elif model_type == 'Neural Network':
-        # GridSearchCV cho Neural Network
-        param_grid = {
-            'hidden_layer_sizes': [(50,), (100,), (50, 50)],
-            'activation': ['relu', 'tanh'],
-            'solver': ['adam', 'sgd'],
-            'learning_rate': ['constant', 'adaptive'],
-            'max_iter': [200, 500],
-            'alpha': [0.0001, 0.001, 0.01]
-        }
-
-        # Tạo pipeline với chuẩn hóa dữ liệu và MLPRegressor
-        model = make_pipeline(StandardScaler(), MLPRegressor(random_state=42))
-        
-        # GridSearchCV để tìm tham số tối ưu
-        grid_search = GridSearchCV(model, param_grid, cv=5, scoring='neg_mean_squared_error', verbose=2, n_jobs=-1)
-        grid_search.fit(X_train, y_train)
-        
-        # Lấy mô hình tốt nhất và tham số tốt nhất
-        model = grid_search.best_estimator_
-        best_params = grid_search.best_params_
-        st.write(f"Best Hyperparameters: {best_params}")
-
+        model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
     elif model_type == 'Stacking':
-        # Stacking sử dụng LinearRegression làm mô hình chính và kết hợp Lasso làm mô hình con
         estimators = [
             ('lasso', Lasso(alpha=0.1))
         ]
         model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
     
     model.fit(X_train, y_train)
-    return model, cols
+
+    # Tính toán các chỉ số đánh giá
+    y_pred = model.predict(X_test)
+    mae = mean_absolute_error(y_test, y_pred)
+    mse = mean_squared_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+
+    return model, mae, mse, r2, cols
 
 # Tạo input từ người dùng
 def create_input_data(cols):
-    # Chọn thương hiệu và hệ điều hành
     brand = st.selectbox('Chọn thương hiệu', ['Apple', 'Samsung', 'Xiaomi', 'Oppo', 'Realme'])
     os = st.selectbox('Chọn hệ điều hành', ['Android', 'iOS'])
     inches = st.slider('Kích thước màn hình (inches)', 4.0, 7.0, 6.0)
@@ -83,7 +68,6 @@ def create_input_data(cols):
     weight = st.slider('Trọng lượng (g)', 100, 300, 200)
     storage = st.slider('Dung lượng bộ nhớ trong (GB)', 16, 512, 128)
 
-    # Tạo DataFrame cho đầu vào
     input_data = pd.DataFrame({
         'inches': [inches],
         'width': [width],
@@ -93,25 +77,22 @@ def create_input_data(cols):
         'weight(g)': [weight],
         'storage(GB)': [storage]
     })
-    
-    # One-hot encoding cho thương hiệu và hệ điều hành
+
     brand_dict = {'brand_Apple': 0, 'brand_Samsung': 0, 'brand_Xiaomi': 0, 'brand_Oppo': 0, 'brand_Realme': 0}
     os_dict = {'os_Android': 0, 'os_iOS': 0}
-    
+
     brand_dict[f'brand_{brand}'] = 1
     os_dict[f'os_{os}'] = 1
-    
+
     for key, value in brand_dict.items():
         input_data[key] = value
     for key, value in os_dict.items():
         input_data[key] = value
-    
-    # Đảm bảo dữ liệu đầu vào có đủ các cột cần thiết
+
     for col in cols:
         if col not in input_data.columns:
             input_data[col] = 0
-    
-    # Sắp xếp cột theo thứ tự đã huấn luyện
+
     input_data = input_data[cols]
 
     return input_data
@@ -120,18 +101,37 @@ def create_input_data(cols):
 model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Tải và huấn luyện mô hình
-model, cols = train_model(model_type)
+model, mae, mse, r2, cols = train_model(model_type)
 
 # Tạo dữ liệu input từ người dùng
 input_data = create_input_data(cols)
 
 # Thêm nút dự đoán
 if st.button("Dự đoán giá"):
-    # Dự đoán giá
     try:
         predicted_price = model.predict(input_data)[0]
-        # Hiển thị giá dự đoán
         st.title("Dự đoán giá Smartphone")
         st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
+        
+        # Hiển thị biểu đồ so sánh các chỉ số đánh giá
+        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+
+        # MAE
+        axs[0].bar(['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'], [mae, mae, mae, mae], color='lightblue')
+        axs[0].set_title('MAE Comparison')
+        axs[0].set_ylabel('MAE')
+
+        # MSE
+        axs[1].bar(['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'], [mse, mse, mse, mse], color='lightgreen')
+        axs[1].set_title('MSE Comparison')
+        axs[1].set_ylabel('MSE')
+
+        # R²
+        axs[2].bar(['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'], [r2, r2, r2, r2], color='salmon')
+        axs[2].set_title('R² Comparison')
+        axs[2].set_ylabel('R²')
+
+        st.pyplot(fig)
+
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
