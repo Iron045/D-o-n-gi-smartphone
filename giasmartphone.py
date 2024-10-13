@@ -3,10 +3,11 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, Lasso
-from sklearn.ensemble import StackingRegressor
+from sklearn.ensemble import StackingRegressor, RandomForestRegressor, GradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # Tải dữ liệu và xử lý
 @st.cache
@@ -17,8 +18,11 @@ def load_data():
     data['width'] = pd.to_numeric(data['width'])
     data['height'] = pd.to_numeric(data['height'])
     
+    # Tính toán tỷ lệ khung hình
+    data['aspect_ratio'] = data['width'] / data['height']
+    
     # Lọc các cột liên quan
-    data_filtered = data[['brand', 'os', 'inches', 'width', 'height', 'battery', 'ram(GB)', 'weight(g)', 'storage(GB)', 'price(USD)']]
+    data_filtered = data[['brand', 'os', 'inches', 'width', 'height', 'battery', 'ram(GB)', 'weight(g)', 'storage(GB)', 'price(USD)', 'aspect_ratio']]
     
     # One-hot encoding cho các cột phân loại
     data_encoded = pd.get_dummies(data_filtered, columns=['brand', 'os'], drop_first=True)
@@ -27,7 +31,7 @@ def load_data():
     
     return X, y, X.columns
 
-# Huấn luyện mô hình
+# Huấn luyện mô hình và trả về các chỉ số đánh giá
 @st.cache
 def train_model(model_type):
     X, y, cols = load_data()
@@ -38,17 +42,24 @@ def train_model(model_type):
     elif model_type == 'Lasso Regression':
         model = Lasso(alpha=0.1)
     elif model_type == 'Neural Network':
-        # Sử dụng pipeline với StandardScaler để chuẩn hóa dữ liệu trước khi huấn luyện mạng neural
         model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
     elif model_type == 'Stacking':
-        # Stacking sử dụng LinearRegression làm mô hình chính và kết hợp Lasso làm mô hình con
         estimators = [
-            ('lasso', Lasso(alpha=0.1))
+            ('lasso', Lasso(alpha=0.1)),
+            ('rf', RandomForestRegressor(n_estimators=100, random_state=42)),
+            ('gb', GradientBoostingRegressor(random_state=42))
         ]
         model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
-    
+
     model.fit(X_train, y_train)
-    return model, cols
+    
+    # Dự đoán và tính toán các chỉ số đánh giá
+    y_pred = model.predict(X_test)
+    mse = mean_squared_error(y_test, y_pred)
+    mae = mean_absolute_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+
+    return model, cols, mse, mae, r2
 
 # Tạo input từ người dùng
 def create_input_data(cols):
@@ -71,7 +82,8 @@ def create_input_data(cols):
         'battery': [battery],
         'ram(GB)': [ram],
         'weight(g)': [weight],
-        'storage(GB)': [storage]
+        'storage(GB)': [storage],
+        'aspect_ratio': [width / height]
     })
     
     # One-hot encoding cho thương hiệu và hệ điều hành
@@ -100,7 +112,7 @@ def create_input_data(cols):
 model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Tải và huấn luyện mô hình
-model, cols = train_model(model_type)
+model, cols, mse, mae, r2 = train_model(model_type)
 
 # Tạo dữ liệu input từ người dùng
 input_data = create_input_data(cols)
@@ -110,8 +122,26 @@ if st.button("Dự đoán giá"):
     # Dự đoán giá
     try:
         predicted_price = model.predict(input_data)[0]
-        # Hiển thị giá dự đoán
+        # Hiển thị giá dự đoán và các chỉ số đánh giá
         st.title("Dự đoán giá Smartphone")
         st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
+        
+        # Hiển thị các chỉ số đánh giá của mô hình đã chọn
+        st.subheader("Tham số đánh giá mô hình:")
+        st.write(f"Model: {model_type}")
+        st.write(f"Mean Squared Error (MSE): {mse:.2f}")
+        st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
+        st.write(f"R² Score: {r2:.2f}")
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
+
+# Hiển thị các tham số đánh giá cho tất cả các mô hình
+st.subheader("Tham số đánh giá cho tất cả các mô hình:")
+models = ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking']
+for model_name in models:
+    _, _, mse, mae, r2 = train_model(model_name)
+    st.write(f"**{model_name}:**")
+    st.write(f"Mean Squared Error (MSE): {mse:.2f}")
+    st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
+    st.write(f"R² Score: {r2:.2f}")
+    st.write("---")
