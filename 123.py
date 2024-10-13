@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.ensemble import StackingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
 
 # Tải dữ liệu và xử lý
 @st.cache
@@ -39,8 +38,28 @@ def train_model(model_type):
     elif model_type == 'Lasso Regression':
         model = Lasso(alpha=0.1)
     elif model_type == 'Neural Network':
-        # Sử dụng pipeline với StandardScaler để chuẩn hóa dữ liệu trước khi huấn luyện mạng neural
-        model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
+        # GridSearchCV cho Neural Network
+        param_grid = {
+            'hidden_layer_sizes': [(50,), (100,), (50, 50)],
+            'activation': ['relu', 'tanh'],
+            'solver': ['adam', 'sgd'],
+            'learning_rate': ['constant', 'adaptive'],
+            'max_iter': [200, 500],
+            'alpha': [0.0001, 0.001, 0.01]
+        }
+
+        # Tạo pipeline với chuẩn hóa dữ liệu và MLPRegressor
+        model = make_pipeline(StandardScaler(), MLPRegressor(random_state=42))
+        
+        # GridSearchCV để tìm tham số tối ưu
+        grid_search = GridSearchCV(model, param_grid, cv=5, scoring='neg_mean_squared_error', verbose=2, n_jobs=-1)
+        grid_search.fit(X_train, y_train)
+        
+        # Lấy mô hình tốt nhất và tham số tốt nhất
+        model = grid_search.best_estimator_
+        best_params = grid_search.best_params_
+        st.write(f"Best Hyperparameters: {best_params}")
+
     elif model_type == 'Stacking':
         # Stacking sử dụng LinearRegression làm mô hình chính và kết hợp Lasso làm mô hình con
         estimators = [
@@ -49,7 +68,7 @@ def train_model(model_type):
         model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
     
     model.fit(X_train, y_train)
-    return model, X_test, y_test, cols
+    return model, cols
 
 # Tạo input từ người dùng
 def create_input_data(cols):
@@ -101,7 +120,7 @@ def create_input_data(cols):
 model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Tải và huấn luyện mô hình
-model, X_test, y_test, cols = train_model(model_type)
+model, cols = train_model(model_type)
 
 # Tạo dữ liệu input từ người dùng
 input_data = create_input_data(cols)
@@ -116,20 +135,3 @@ if st.button("Dự đoán giá"):
         st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
-
-# Hiển thị biểu đồ giá dự đoán so với giá thực tế
-if st.button("Hiển thị biểu đồ so sánh"):
-    # Dự đoán cho tập test
-    y_pred = model.predict(X_test)
-
-    # Vẽ biểu đồ
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(len(y_test)), y_test, label='Actual Price', color='blue', marker='o')
-    plt.plot(range(len(y_pred)), y_pred, label='Predicted Price', color='red', marker='x')
-    plt.xlabel('Index')
-    plt.ylabel('Price (USD)')
-    plt.title('Actual vs Predicted Prices')
-    plt.legend()
-
-    # Hiển thị biểu đồ trong Streamlit
-    st.pyplot(plt)
