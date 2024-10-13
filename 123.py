@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.ensemble import StackingRegressor, RandomForestRegressor, GradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # Tải dữ liệu và xử lý
 @st.cache
@@ -52,10 +52,14 @@ def train_model(model_type):
         model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
 
     model.fit(X_train, y_train)
+    
+    # Dự đoán và tính toán các chỉ số đánh giá
     y_pred = model.predict(X_test)
     mse = mean_squared_error(y_test, y_pred)
-    
-    return model, cols, mse
+    mae = mean_absolute_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+
+    return model, cols, mse, mae, r2
 
 # Tạo input từ người dùng
 def create_input_data(cols):
@@ -108,7 +112,7 @@ def create_input_data(cols):
 model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Tải và huấn luyện mô hình
-model, cols, mse = train_model(model_type)
+model, cols, mse, mae, r2 = train_model(model_type)
 
 # Tạo dữ liệu input từ người dùng
 input_data = create_input_data(cols)
@@ -118,9 +122,13 @@ if st.button("Dự đoán giá"):
     # Dự đoán giá
     try:
         predicted_price = model.predict(input_data)[0]
-        # Hiển thị giá dự đoán
+        # Hiển thị giá dự đoán và các chỉ số đánh giá
         st.title("Dự đoán giá Smartphone")
         st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
-        st.subheader(f"Mean Squared Error: {mse:.2f}")
+        
+        st.subheader("Tham số đánh giá mô hình:")
+        st.write(f"Mean Squared Error (MSE): {mse:.2f}")
+        st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
+        st.write(f"R² Score: {r2:.2f}")
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
