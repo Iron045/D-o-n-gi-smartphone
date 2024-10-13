@@ -143,7 +143,6 @@ if st.button("Dự đoán giá"):
         plt.title('Giá Thực Tế vs Giá Dự Đoán')
         plt.xlabel('Giá Thực Tế (USD)')
         plt.ylabel('Giá Dự Đoán (USD)')
-        st.pyplot(plt)
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
 
