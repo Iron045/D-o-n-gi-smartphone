@@ -8,9 +8,10 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest, f_regression
+import joblib
 
 # Tải dữ liệu và xử lý
-@st.cache
+@st.cache_data
 def load_data():
     data = pd.read_csv('phone_prices.csv')  # Đường dẫn file CSV của bạn
     # Tách cột resolution thành width và height
@@ -33,6 +34,7 @@ def load_data():
     return X, y, X.columns
 
 # Tối ưu mô hình Neural Network với RandomizedSearchCV
+@st.cache_resource
 def optimize_neural_network(X_train, y_train):
     mlp = MLPRegressor(random_state=42)
 
@@ -54,6 +56,15 @@ def optimize_neural_network(X_train, y_train):
     best_model = random_search.best_estimator_
 
     return best_model
+
+# Lưu và tải mô hình
+@st.cache_resource
+def save_model(model, filename):
+    joblib.dump(model, filename)
+
+@st.cache_resource
+def load_model(filename):
+    return joblib.load(filename)
 
 # Tạo input từ người dùng
 def create_input_data(cols):
@@ -100,6 +111,7 @@ def create_input_data(cols):
     return input_data
 
 # Huấn luyện và đánh giá mô hình
+@st.cache_resource
 def train_and_evaluate_models():
     X, y, cols = load_data()
     
@@ -122,6 +134,13 @@ def train_and_evaluate_models():
 
     # Neural Network (MLP) với tối ưu tham số
     nn_model = optimize_neural_network(X_train, y_train)
+    
+    # Lưu mô hình Neural Network
+    save_model(nn_model, 'nn_model.joblib')
+
+    # Tải mô hình Neural Network nếu cần
+    nn_model = load_model('nn_model.joblib')
+    
     nn_score = nn_model.score(X_test, y_test)
 
     # Stacking Regressor
@@ -135,16 +154,15 @@ def train_and_evaluate_models():
     return lr_model, lasso_model, nn_model, stacking_model, selected_features
 
 # Main Streamlit app
-st.title("Dự đoán giá Smartphone")
+st.title("Dự đoán Giá Smartphone")
 
-# Huấn luyện và đánh giá mô hình
+model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
+
+# Tải và huấn luyện mô hình
 lr_model, lasso_model, nn_model, stacking_model, cols = train_and_evaluate_models()
 
 # Tạo dữ liệu input từ người dùng
 input_data = create_input_data(cols)
-
-# Người dùng chọn mô hình
-model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Thêm nút dự đoán
 if st.button("Dự đoán giá"):
