@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.ensemble import StackingRegressor, RandomForestRegressor, GradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
@@ -40,9 +40,19 @@ def train_model(model_type):
     if model_type == 'Linear Regression':
         model = LinearRegression()
     elif model_type == 'Lasso Regression':
-        model = Lasso(alpha=0.1)
+        # Tuning tham số cho Lasso
+        param_grid = {'alpha': np.logspace(-3, 3, 7)}  # Khám phá các giá trị alpha
+        model = GridSearchCV(Lasso(), param_grid, cv=5, scoring='neg_mean_squared_error')
     elif model_type == 'Neural Network':
         model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
+    elif model_type == 'Random Forest':
+        param_grid = {
+            'n_estimators': [100, 200],
+            'max_depth': [None, 10, 20],
+            'min_samples_split': [2, 5],
+            'min_samples_leaf': [1, 2, 4],
+        }
+        model = GridSearchCV(RandomForestRegressor(), param_grid, cv=5, scoring='neg_mean_squared_error')
     elif model_type == 'Stacking':
         estimators = [
             ('lasso', Lasso(alpha=0.1)),
@@ -109,7 +119,7 @@ def create_input_data(cols):
     return input_data
 
 # Người dùng chọn mô hình
-model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
+model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Random Forest', 'Stacking'])
 
 # Tải và huấn luyện mô hình
 model, cols, mse, mae, r2 = train_model(model_type)
@@ -137,7 +147,7 @@ if st.button("Dự đoán giá"):
 
 # Hiển thị các tham số đánh giá cho tất cả các mô hình
 st.subheader("Tham số đánh giá cho tất cả các mô hình:")
-models = ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking']
+models = ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Random Forest', 'Stacking']
 for model_name in models:
     _, _, mse, mae, r2 = train_model(model_name)
     st.write(f"**{model_name}:**")
