@@ -31,7 +31,7 @@ def load_data():
     
     return X, y, X.columns
 
-# Huấn luyện mô hình
+# Huấn luyện mô hình và trả về các chỉ số đánh giá
 @st.cache
 def train_model(model_type):
     X, y, cols = load_data()
@@ -126,9 +126,22 @@ if st.button("Dự đoán giá"):
         st.title("Dự đoán giá Smartphone")
         st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
         
+        # Hiển thị các chỉ số đánh giá của mô hình đã chọn
         st.subheader("Tham số đánh giá mô hình:")
+        st.write(f"Model: {model_type}")
         st.write(f"Mean Squared Error (MSE): {mse:.2f}")
         st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
         st.write(f"R² Score: {r2:.2f}")
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
+
+# Hiển thị các tham số đánh giá cho tất cả các mô hình
+st.subheader("Tham số đánh giá cho tất cả các mô hình:")
+models = ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking']
+for model_name in models:
+    _, _, mse, mae, r2 = train_model(model_name)
+    st.write(f"**{model_name}:**")
+    st.write(f"Mean Squared Error (MSE): {mse:.2f}")
+    st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
+    st.write(f"R² Score: {r2:.2f}")
+    st.write("---")
