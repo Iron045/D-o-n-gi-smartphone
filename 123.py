@@ -1,13 +1,15 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, StackingRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.linear_model import LinearRegression, Lasso
+from sklearn.ensemble import StackingRegressor
+from sklearn.neural_network import MLPRegressor
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # Tải dữ liệu và xử lý
 @st.cache
@@ -28,7 +30,7 @@ def load_data():
     
     return X, y, X.columns
 
-# Huấn luyện mô hình với GridSearchCV
+# Huấn luyện mô hình với GridSearchCV và Stacking Regressor
 @st.cache
 def train_model(model_type):
     X, y, cols = load_data()
@@ -39,18 +41,19 @@ def train_model(model_type):
     
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-    if model_type == 'Random Forest':
-        model = RandomForestRegressor(random_state=42)
+    if model_type == 'Linear Regression':
+        model = LinearRegression()
+        param_grid = {}  # Không cần GridSearch cho LinearRegression
+    elif model_type == 'Lasso Regression':
+        model = Lasso(alpha=0.1)
         param_grid = {
-            'n_estimators': [100, 200, 300],
-            'max_depth': [5, 10, 20]
+            'alpha': [0.01, 0.1, 1, 10]
         }
-    elif model_type == 'Gradient Boosting':
-        model = GradientBoostingRegressor(random_state=42)
+    elif model_type == 'Neural Network':
+        model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
         param_grid = {
-            'n_estimators': [100, 200],
-            'max_depth': [3, 5, 7],
-            'learning_rate': [0.01, 0.1]
+            'mlpregressor__hidden_layer_sizes': [(64, 64), (128, 64), (128, 128)],
+            'mlpregressor__alpha': [0.0001, 0.001]
         }
     elif model_type == 'Stacking':
         estimators = [
@@ -58,14 +61,22 @@ def train_model(model_type):
             ('dt', DecisionTreeRegressor(max_depth=5))
         ]
         model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
-        param_grid = {}  # Stacking không cần GridSearch cho tham số mô hình con
+        param_grid = {}  # Không cần GridSearch cho StackingRegressor
     
-    # Sử dụng GridSearchCV để tối ưu tham số
+    # Sử dụng GridSearchCV để tối ưu hóa tham số
     grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=3, scoring='neg_mean_squared_error', n_jobs=-1)
     grid_search.fit(X_train, y_train)
     
     best_model = grid_search.best_estimator_
-    return best_model, cols, grid_search.best_params_
+    
+    # Đánh giá mô hình trên tập kiểm tra
+    y_pred = best_model.predict(X_test)
+    
+    mae = mean_absolute_error(y_test, y_pred)
+    mse = mean_squared_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    
+    return best_model, cols, mae, mse, r2, grid_search.best_params_
 
 # Tạo input từ người dùng
 def create_input_data(cols):
@@ -114,13 +125,19 @@ def create_input_data(cols):
     return input_data
 
 # Người dùng chọn mô hình
-model_type = st.selectbox('Chọn mô hình dự đoán', ['Random Forest', 'Gradient Boosting', 'Stacking'])
+model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Tải và huấn luyện mô hình
-model, cols, best_params = train_model(model_type)
+model, cols, mae, mse, r2, best_params = train_model(model_type)
 
 # Tạo dữ liệu input từ người dùng
 input_data = create_input_data(cols)
+
+# Hiển thị các chỉ số đánh giá
+st.write(f"MAE: {mae:.2f}")
+st.write(f"MSE: {mse:.2f}")
+st.write(f"R²: {r2:.2f}")
+st.write(f"Tham số tối ưu: {best_params}")
 
 # Thêm nút dự đoán
 if st.button("Dự đoán giá"):
@@ -131,7 +148,6 @@ if st.button("Dự đoán giá"):
         # Hiển thị giá dự đoán
         st.title("Dự đoán giá Smartphone")
         st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
-        st.write(f"Tham số tối ưu: {best_params}")
         
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
