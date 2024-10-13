@@ -130,13 +130,6 @@ if st.button("Dự đoán giá"):
         st.title("Dự đoán giá Smartphone")
         st.subheader(f"Giá dự đoán: {predicted_price:.2f} USD")
         
-        # Hiển thị các chỉ số đánh giá của mô hình đã chọn
-        st.subheader("Tham số đánh giá mô hình:")
-        st.write(f"Model: {model_type}")
-        st.write(f"Mean Squared Error (MSE): {mse:.2f}")
-        st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
-        st.write(f"R² Score: {r2:.2f}")
-        
         # Vẽ đồ thị phân tán giữa giá thực tế và giá dự đoán
         plt.figure(figsize=(10, 6))
         sns.scatterplot(x=y_test, y=y_pred)
