@@ -1,13 +1,16 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.linear_model import LinearRegression, Lasso
-from sklearn.ensemble import StackingRegressor, RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import StackingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 # Tải dữ liệu và xử lý
 @st.cache
@@ -40,14 +43,15 @@ def train_model(model_type):
     if model_type == 'Linear Regression':
         model = LinearRegression()
     elif model_type == 'Lasso Regression':
-        model = Lasso(alpha=0.1)
+        # Tuning tham số cho Lasso
+        param_grid = {'alpha': np.logspace(-3, 3, 7)}  # Khám phá các giá trị alpha
+        model = GridSearchCV(Lasso(), param_grid, cv=5, scoring='neg_mean_squared_error')
     elif model_type == 'Neural Network':
         model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
     elif model_type == 'Stacking':
         estimators = [
             ('lasso', Lasso(alpha=0.1)),
-            ('rf', RandomForestRegressor(n_estimators=100, random_state=42)),
-            ('gb', GradientBoostingRegressor(random_state=42))
+            ('nn', MLPRegressor(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42))
         ]
         model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
 
@@ -59,7 +63,7 @@ def train_model(model_type):
     mae = mean_absolute_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
 
-    return model, cols, mse, mae, r2
+    return model, cols, mse, mae, r2, y_test, y_pred
 
 # Tạo input từ người dùng
 def create_input_data(cols):
@@ -112,7 +116,7 @@ def create_input_data(cols):
 model_type = st.selectbox('Chọn mô hình dự đoán', ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking'])
 
 # Tải và huấn luyện mô hình
-model, cols, mse, mae, r2 = train_model(model_type)
+model, cols, mse, mae, r2, y_test, y_pred = train_model(model_type)
 
 # Tạo dữ liệu input từ người dùng
 input_data = create_input_data(cols)
@@ -132,16 +136,25 @@ if st.button("Dự đoán giá"):
         st.write(f"Mean Squared Error (MSE): {mse:.2f}")
         st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
         st.write(f"R² Score: {r2:.2f}")
+        
+        # Vẽ đồ thị phân tán giữa giá thực tế và giá dự đoán
+        plt.figure(figsize=(10, 6))
+        sns.scatterplot(x=y_test, y=y_pred)
+        plt.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], '--r')
+        plt.title('Giá Thực Tế vs Giá Dự Đoán')
+        plt.xlabel('Giá Thực Tế (USD)')
+        plt.ylabel('Giá Dự Đoán (USD)')
     except ValueError as e:
         st.error(f"Đã xảy ra lỗi: {e}")
 
 # Hiển thị các tham số đánh giá cho tất cả các mô hình
 st.subheader("Tham số đánh giá cho tất cả các mô hình:")
 models = ['Linear Regression', 'Lasso Regression', 'Neural Network', 'Stacking']
-for model_name in models:
-    _, _, mse, mae, r2 = train_model(model_name)
-    st.write(f"**{model_name}:**")
-    st.write(f"Mean Squared Error (MSE): {mse:.2f}")
-    st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
-    st.write(f"R² Score: {r2:.2f}")
-    st.write("---")
+results = {}
+
+for m in models:
+    _, _, mse, mae, r2, _, _ = train_model(m)
+    results[m] = (mse, mae, r2)
+
+results_df = pd.DataFrame.from_dict(results, orient='index', columns=['MSE', 'MAE', 'R² Score'])
+st.write(results_df)
